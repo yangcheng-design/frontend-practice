@@ -1,0 +1,90 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Order sent</title>
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:#f2f2f2;
+         font-family:"Wealthsimple Sans",-apple-system,"Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased; user-select:none; }
+
+  .ws-spin-check { display:flex; flex-direction:column; align-items:center; gap:28px; perspective:800px; cursor:pointer; }
+  .circle-wrap { width:120px; height:120px; position:relative; transform-style:preserve-3d; }
+  svg.main-svg { width:120px; height:120px; transform:rotate(-90deg); }
+
+  .circle-track    { fill:none; stroke:rgba(0,0,0,.06); stroke-width:3.5; }
+  .circle-spinner  { fill:none; stroke:#409652; stroke-width:3.5; stroke-linecap:round; stroke-dasharray:240; stroke-dashoffset:180;
+                     transform-origin:center; animation:spinner .8s cubic-bezier(.4,0,.2,1) infinite; opacity:1; transition:opacity .25s ease; }
+  .circle-complete { fill:none; stroke:#409652; stroke-width:3.5; stroke-linecap:round; stroke-dasharray:301.6; stroke-dashoffset:301.6; opacity:0; }
+  .circle-fill     { fill:#409652; opacity:0; transform-origin:center; transform:scale(0); }
+
+  .checkmark { position:absolute; top:50%; left:50%; width:50px; height:50px; opacity:0; transform:translate(-50%,-50%) scale(.5); }
+  .checkmark-path { fill:none; stroke:#409652; stroke-width:4.5; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:48; stroke-dashoffset:48; }
+
+  .glow { position:absolute; top:50%; left:50%; width:70px; height:70px; transform:translate(-50%,-50%) scale(.5);
+          background:#409652; border-radius:50%; filter:blur(24px); opacity:0; pointer-events:none; }
+  .ripple, .ripple-2 { position:absolute; top:50%; left:50%; width:96px; height:96px; transform:translate(-50%,-50%) scale(1);
+                       border-radius:50%; opacity:0; pointer-events:none; }
+  .ripple   { border:2px solid rgba(64,150,82,.35); }
+  .ripple-2 { border:1.5px solid rgba(64,150,82,.2); }
+
+  .status-text { color:rgba(0,0,0,.35); font-size:17px; font-weight:500; letter-spacing:.3px; min-height:24px;
+                 transition:all .4s ease; filter:blur(0); opacity:1; }
+  .status-text.fade-out { filter:blur(8px); opacity:0; transform:translateY(6px) scale(.96); }
+  .status-text.done { color:rgba(0,0,0,.7); }
+
+  @keyframes spinner { to { transform:rotate(360deg); } }
+
+  .completed .circle-spinner  { opacity:0; }
+  .completed .circle-complete { opacity:1; animation:drawCircle .45s cubic-bezier(.22,1,.36,1) forwards; }
+  .completed .circle-fill     { animation:fillIn .6s cubic-bezier(.34,1.56,.64,1) .08s forwards; }
+  .completed .glow            { animation:glowIn .8s cubic-bezier(.22,1,.36,1) .1s forwards; }
+  .completed .circle-wrap     { animation:pop3d .9s cubic-bezier(.22,1,.36,1) .12s both; }
+  .completed .checkmark       { animation:checkPop .45s cubic-bezier(.34,1.56,.64,1) .36s both; }
+  .completed .checkmark-path  { animation:drawCheck .4s cubic-bezier(.22,1,.36,1) .38s forwards; }
+  .completed .ripple          { animation:rippleOut 1s cubic-bezier(.22,1,.36,1) .4s forwards; }
+  .completed .ripple-2        { animation:rippleOut2 1.3s cubic-bezier(.22,1,.36,1) .55s forwards; }
+
+  @keyframes drawCircle { to { stroke-dashoffset:0; } }
+  @keyframes drawCheck  { to { stroke-dashoffset:0; } }
+  @keyframes fillIn   { 0%{opacity:0;transform:scale(.85)} 60%{opacity:.1;transform:scale(1.04)} 100%{opacity:.07;transform:scale(1)} }
+  @keyframes checkPop { 0%{transform:translate(-50%,-50%) scale(.5);opacity:0} 100%{transform:translate(-50%,-50%) scale(1);opacity:1} }
+  @keyframes glowIn   { 0%{transform:translate(-50%,-50%) scale(.5);opacity:0} 50%{opacity:.2} 100%{transform:translate(-50%,-50%) scale(1.6);opacity:.12} }
+  @keyframes pop3d {
+    0%   { transform:scale(1)    rotateX(0)     rotateY(0); }
+    22%  { transform:scale(1.15) rotateX(-8deg) rotateY(5deg); }
+    48%  { transform:scale(.95)  rotateX(3deg)  rotateY(-2deg); }
+    72%  { transform:scale(1.03) rotateX(-1deg) rotateY(.5deg); }
+    100% { transform:scale(1)    rotateX(0)     rotateY(0); }
+  }
+  @keyframes rippleOut  { 0%{transform:translate(-50%,-50%) scale(1);opacity:.5;filter:blur(0)}  100%{transform:translate(-50%,-50%) scale(2);opacity:0;filter:blur(2px)} }
+  @keyframes rippleOut2 { 0%{transform:translate(-50%,-50%) scale(1);opacity:.35;filter:blur(0)} 100%{transform:translate(-50%,-50%) scale(2.4);opacity:0;filter:blur(3px)} }
+</style>
+
+<div id="host"></div>
+
+<script>
+  const SUBMIT_MS = 2000, SWAP_MS = 2350;
+  const host = document.getElementById('host');
+  let timers = [];
+
+  function render() {
+    timers.forEach(clearTimeout); timers = [];
+    host.innerHTML = `
+      <div class="ws-spin-check" role="button" aria-label="Replay order animation">
+        <div class="circle-wrap">
+          <svg class="main-svg" viewBox="0 0 120 120">
+            <circle class="circle-track"    cx="60" cy="60" r="48"/>
+            <circle class="circle-fill"     cx="60" cy="60" r="46.25"/>
+            <circle class="circle-complete" cx="60" cy="60" r="48"/>
+            <circle class="circle-spinner"  cx="60" cy="60" r="48"/>
+          </svg>
+          <svg class="checkmark" viewBox="0 0 50 50"><path class="checkmark-path" d="M12 26 L22 36 L38 16"/></svg>
+          <div class="glow"></div><div class="ripple"></div><div class="ripple-2"></div>
+        </div>
+        <div class="status-text">Submitting order</div>
+      </div>`;
+    const root = host.firstElementChild, text = root.querySelector('.status-text');
+    root.addEventListener('click', render);                      // replay = remount, like React key++
+    timers.push(setTimeout(() => { root.classList.add('completed'); text.classList.add('fade-out'); }, SUBMIT_MS));
+    timers.push(setTimeout(() => { text.textContent = 'Order sent'; text.classList.replace('fade-out', 'done'); }, SWAP_MS));
+  }
+  render();
+</script>
